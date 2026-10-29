@@ -7,3 +7,7 @@ dist/
 .pytest_cache/
 *.npz
 runs/
+benchmarks/out/
+runs/
+examples/
+*.tif
