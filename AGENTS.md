@@ -64,6 +64,10 @@ PYTHONPATH=src .venv/bin/python benchmarks/run_bench.py             # 基准
 6. 解缠 = 先整数场最小二乘 + 逐弧修正，再相位最小二乘，`unw = 2π·acheck + φ_smooth`。
 7. MATLAB 的 `max_backtrack = n³` 会让 LAMBDA 提前放弃并回退到 bootstrap（非最优）；
    `depsipy` 默认放宽该上限，`compat=True` 可还原。
+8. 对拍通道：本机已装 **Octave 9.4**（含 image/statistics/parallel），配合
+   `benchmarks/octave/shim/` 的 7 个 shim 可跑 MATLAB 原码。注意两点：
+   (a) `ps_set_globals` 会把同名**函数参数**遮蔽成空全局，驱动脚本必须先赋值；
+   (b) Octave 的 `parfor` 串行，故 MATLAB 侧耗时是"未并行"的下界。
 
 ## 5. 当前状态（每轮更新）
 
@@ -71,6 +75,9 @@ PYTHONPATH=src .venv/bin/python benchmarks/run_bench.py             # 基准
   PSC/PSP 选择（精度 1.00 / 单元覆盖率 1.00，见 docs/selection-calibration.md）；54 项测试
 - 代码完成·部分验证：弧网+VCE（VCE 待单测）、空间解缠（合成场已验证核心）
 - 进行中：pipeline/CLI/状态落盘（M2）
+- **性能对拍已完成（v0）**：estimate 987×（3000 弧×19 ifg，Octave 10.07s → 0.0102s，
+  整数解 3000/3000 相同）、selection 10.8×（400×400×20，PSC 逐个相同）；详见
+  `docs/performance.md` 与 `benchmarks/results/`。对拍还发现并修复 2 个真 bug（见 §4.8）。
 - 未开始：大气分离/Kriging、加密、形变模型、噪声滤波、STC、输出与可视化、基准
 - 授权：沿用「仅限科研，禁止商用」，**暂不对外分发**（用户 2026-10-29 决策）
 

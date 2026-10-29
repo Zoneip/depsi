@@ -192,11 +192,15 @@ if HAVE_NUMBA:
     @njit(cache=True, parallel=True, nogil=True)
     def _resolve_all_nb(dphase, Zt, invLtDL, L, D, invLin, invD, invZT, use_ils, max_backtrack, out):
         npnts, n = dphase.shape
-        zfloat = np.empty(n)
-        zboot = np.empty(n)
-        zcheck = np.empty(n)
-        afixed = np.empty(n)
         for p in prange(npnts):
+            # NB: every temporary must be allocated *inside* the prange body.
+            # Arrays created outside are shared between threads and produce
+            # silently wrong results (found by comparing 200 arcs against the
+            # MATLAB code: the ambiguities came out as a linear ramp).
+            zfloat = np.empty(n)
+            zboot = np.empty(n)
+            zcheck = np.empty(n)
+            afixed = np.empty(n)
             for i in range(n):
                 zfloat[i] = dphase[p, i] / (-2.0 * np.pi)
             # zfloat = Zt @ afloat

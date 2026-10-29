@@ -1,0 +1,37 @@
+args = argv();
+toolbox = args{1}; scen = args{2};
+here = fileparts(mfilename('fullpath'));
+addpath(fullfile(here,'shim'));
+addpath(fullfile(toolbox,'main')); addpath(fullfile(toolbox,'utils'));
+addpath(fullfile(toolbox,'lambda')); addpath(fullfile(toolbox,'quadtree'));
+ps_set_globals;
+global project_id ps_method m2ph sat_vel althyp_index althyp_index2
+project_id='dbg'; ps_method='boot';
+m2ph = -4*pi/0.055517120823757024; sat_vel = 7690;
+althyp_index = NaN; althyp_index2 = NaN;
+S = load(fullfile(scen,'est_input.mat'));
+Nifgs = size(S.dphase,2); Npar = 2;  model = 1;
+sig2 = [(pi*15/180)^2; repmat((pi*20/180)^2,Nifgs,1)];
+Qy1 = repmat(2*sig2(1),Nifgs,Nifgs);
+for v=1:Nifgs, Qy1(v,v)=Qy1(v,v)+2*sig2(v+1); end
+mean_h2ph = mean(S.h2ph,1)';
+[B1Qy2,par_index] = ps_model_definitions('model',model,Nifgs,mean_h2ph,S.Btemp,S.Bdop,S.std_param);
+B1 = B1Qy2(1:Nifgs,:); Qy2 = B1Qy2(Nifgs+1:end,:);
+A1 = -2*pi*eye(Nifgs); A = [A1; zeros(Npar,Nifgs)]; B = [B1; eye(Npar)]; C = [A B];
+Qy = [Qy1 zeros(Nifgs,Npar); zeros(Npar,Nifgs) Qy2];
+Qchat = inv(C'*inv(Qy)*C); Qahat = Qchat(1:Nifgs,1:Nifgs);
+printf('DBG_QA_DIAG '); printf('%.6f ', diag(Qahat)(1:4)); printf('\n');
+[Z,L,D] = decorrel_freek(Qahat);
+printf('DBG_Z_FIRSTROW '); printf('%d ', Z(1,:)); printf('\n');
+printf('DBG_D '); printf('%.6f ', D(1:4)); printf('\n');
+afloat = S.dphase(1,:)'/(-2*pi); zfloat = Z'*afloat;
+[Chi2,zboot] = ps_chistart(D,L,zfloat,1);
+printf('DBG_CHI2 %.8f\n', Chi2);
+printf('DBG_ZBOOT '); printf('%.1f ', zboot); printf('\n');
+invZ = inv(Z); acheck = round(zboot'*invZ)';
+printf('DBG_ACHECK '); printf('%.1f ', acheck); printf('\n');
+invQy1 = inv(Qy1); rhs_fixed = inv(B1'*invQy1*B1)*B1'*invQy1;
+y = S.dphase(1,:)'; y_unwrap = y + 2*pi*acheck; bcheck = rhs_fixed*y_unwrap;
+echeck = y_unwrap - B1*bcheck; b = Nifgs-Npar;
+printf('DBG_VARFAC %.8f\n', (echeck'*invQy1*echeck)/b);
+printf('DBG_ENSCOH %.8f\n', abs(mean(exp(1i*echeck))));

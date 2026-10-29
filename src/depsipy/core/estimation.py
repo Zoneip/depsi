@@ -28,7 +28,6 @@ from .models import NPAR_MAX, build_functional_model, model_spec
 
 __all__ = ["Geometry", "build_geometry", "EstimationResult", "estimate_arcs"]
 
-_DEG = np.pi / 180.0
 
 #: above this condition number the normal-matrix inverse is treated as singular
 _COND_WARN = 1e12
@@ -125,10 +124,15 @@ def build_geometry(
     )
 
     if sig2_est is None:
+        # MATLAB: (pi*15/180)^2 and (pi*30/180)^2 -- i.e. 15 deg and 30 deg in
+        # radians squared.  NB: dividing by 180 is *not* the same as multiplying
+        # by pi/180 (a bug that inflated sig2 by (pi/180)^-2 = 3283).
         if model == 1:  # master atmosphere stochastic
-            sig2 = np.concatenate(([(np.pi * 15 * _DEG) ** 2], np.full(Nifgs, (np.pi * 20 * _DEG) ** 2)))
+            sig2 = np.concatenate(
+                ([np.deg2rad(15.0) ** 2], np.full(Nifgs, np.deg2rad(20.0) ** 2))
+            )
         else:
-            sig2 = np.concatenate(([0.0], np.full(Nifgs, (np.pi * 30 * _DEG) ** 2)))
+            sig2 = np.concatenate(([0.0], np.full(Nifgs, np.deg2rad(30.0) ** 2)))
     else:
         sig2 = np.asarray(sig2_est, dtype=float).ravel()
         if sig2.size != Nifgs + 1:
@@ -294,12 +298,12 @@ def estimate_arcs(
         idx = todo[improved]
         if idx.size:
             out.acheck[idx] = res.acheck[improved]
-            out.param[np.ix_(idx, geom.par_index - 1)] = res.param[improved]
+            out.param[np.ix_(idx, np.asarray(geom.par_index) - 1)] = res.param[improved]
             out.varfac[idx] = res.varfac[improved]
             out.ens_coh[idx] = res.ens_coh[improved]
             out.model[idx] = model
             out.althyp[idx] = (breakpoint - 1) if breakpoint is not None else np.nan
-            out.bcheck[np.ix_(idx, geom.par_index - 1)] = res.bcheck[improved]
+            out.bcheck[np.ix_(idx, np.asarray(geom.par_index) - 1)] = res.bcheck[improved]
         # the original stops testing once the OMT passes (varfac <= 1)
         todo = todo[~(res.varfac <= varfac_switch)]
     return out

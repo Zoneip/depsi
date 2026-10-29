@@ -301,3 +301,44 @@ def test_breakpoint_model_holds_the_rate_after_the_event():
             14, n, np.full(n, 0.1), Btemp, np.zeros(n), std,
             m2ph=m2ph, sat_vel=7550.0,
         )
+
+
+def test_batch_resolution_matches_per_arc_reference():
+    """Regression: the compiled batch kernel must equal the serial reference.
+
+    An earlier version allocated the per-arc temporaries *outside* the numba
+    ``prange`` loop, so the threads shared (and clobbered) them; with 200 arcs the
+    ambiguities came out as a linear ramp.  This test catches that class of bug.
+    """
+    geom = realistic_geometry(n=19, seed=11)
+    n = 19
+    rng = np.random.default_rng(3)
+    dphase = np.mod(rng.normal(0, 0.7, (256, n)) + np.pi, 2 * np.pi) - np.pi
+
+    batch = geom.lambda_model.resolve(dphase, use_ils=False)
+    one_by_one = np.array(
+        [geom.lambda_model.resolve_one(row, use_ils=False)[0] for row in dphase]
+    )
+    np.testing.assert_array_equal(batch, one_by_one)
+
+
+def test_default_variance_components_match_matlab():
+    """``(pi*15/180)^2`` is 15 degrees in radians squared -- not ``pi*15*(pi/180)``."""
+    from depsipy.core.estimation import build_geometry
+
+    geom = build_geometry(
+        2, 4, np.linspace(0.01, 0.04, 4), np.linspace(-1, 1, 4), np.zeros(4),
+        np.array([30, 0.005, 1, 0.02, 0.01, 0.01, 0.005]), None,
+        m2ph=-4 * np.pi / 0.056, sat_vel=7550.0,
+    )
+    np.testing.assert_allclose(np.diag(geom.Qy1), 2 * np.deg2rad(30.0) ** 2)
+
+    geom1 = build_geometry(
+        1, 4, np.linspace(0.01, 0.04, 4), np.linspace(-1, 1, 4), np.zeros(4),
+        np.array([30, 0.005, 1, 0.02, 0.01, 0.01, 0.005]), None,
+        m2ph=-4 * np.pi / 0.056, sat_vel=7550.0,
+    )
+    np.testing.assert_allclose(
+        np.diag(geom1.Qy1),
+        2 * np.deg2rad(15.0) ** 2 + 2 * np.deg2rad(20.0) ** 2,
+    )

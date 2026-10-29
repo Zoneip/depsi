@@ -1,0 +1,56 @@
+{
+  "depsipy": {
+    "estimation": {
+      "arcs": 3000,
+      "nifgs": 19,
+      "time_s": 0.0102,
+      "reps": [
+        0.0109,
+        0.0102,
+        0.0108,
+        0.0113,
+        0.0104
+      ],
+      "throughput_arcs_s": 294572,
+      "median_varfac": 1.8196498568730166,
+      "median_ens_coh": 0.8199259089410711,
+      "session": {
+        "acheck_maxdiff": 0.0,
+        "varfac_maxdiff": 1.7763568394002505e-14,
+        "ens_coh_maxdiff": 6.467049118441537e-15
+      }
+    },
+    "selection": {
+      "lines": 400,
+      "pixels": 400,
+      "nslc": 20,
+      "time_s": 0.546,
+      "npsc": 520,
+      "npsp": 52671
+    }
+  },
+  "matlab_via_octave": {
+    "toolbox": "../ps_toolbox_v1.7.8.8_hhf",
+    "estimation": {
+      "est_arcs": 3000.0,
+      "est_nifgs": 19.0,
+      "est_time": 10.0734,
+      "est_finite_varfac": 3000.0,
+      "est_median_varfac": 1.8196,
+      "est_median_coh": 0.8199,
+      "peak_rss_mb": 112.9,
+      "_returncode": 0
+    },
+    "selection": {
+      "sel_time": 5.8832,
+      "sel_npsc": 520.0,
+      "sel_npsp": 55207.0,
+      "peak_rss_mb": 388.1,
+      "_returncode": 0
+    }
+  },
+  "speedup": {
+    "estimation": 987.6,
+    "selection": 10.8
+  }
+}
