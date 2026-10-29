@@ -51,7 +51,7 @@ PYTHONPATH=src .venv/bin/python benchmarks/run_bench.py             # 基准
 ```
 
 环境（2026-10-29 实测）：Python 3.13.5、numpy 2.5.4、scipy 1.18.1、numba 0.68.1、
-16 vCPU、14 GiB RAM、**无 GPU**、**无 MATLAB/Octave**。
+16 vCPU、14 GiB RAM、**无 GPU**、**无 MATLAB**；已装 **Octave 9.4.0** 仅用于对拍（§4.8）。
 
 ## 4. 已核实的关键事实（改动前必读）
 
@@ -72,7 +72,7 @@ PYTHONPATH=src .venv/bin/python benchmarks/run_bench.py             # 基准
 ## 5. 当前状态（每轮更新）
 
 - 已完成·已验证：raw I/O、参数解析、27 模型、LAMBDA+ILS、估计几何、合成器、
-  PSC/PSP 选择（精度 1.00 / 单元覆盖率 1.00，见 docs/selection-calibration.md）；54 项测试
+  PSC/PSP 选择（精度 1.00 / 单元覆盖率 1.00，见 docs/selection-calibration.md）；56 项测试
 - 代码完成·部分验证：弧网+VCE（VCE 待单测）、空间解缠（合成场已验证核心）
 - 进行中：pipeline/CLI/状态落盘（M2）
 - **性能对拍已完成（v0）**：estimate 987×（3000 弧×19 ifg，Octave 10.07s → 0.0102s，
