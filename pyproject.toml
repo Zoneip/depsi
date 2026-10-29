@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "depsipy"
+version = "0.1.0"
+description = "DePSI-compatible Persistent Scatterer InSAR time-series processor (fast, complete, open)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "LicenseRef-DePSI-Scientific-Only" }
+authors = [{ name = "depsipy contributors" }]
+dependencies = [
+    "numpy>=1.24",
+    "scipy>=1.10",
+]
+
+[project.optional-dependencies]
+fast = ["numba>=0.58"]
+hdf = ["h5py>=3.8"]
+plot = ["matplotlib>=3.7"]
+all = ["depsipy[fast,hdf,plot]"]
+
+[project.scripts]
+depsipy = "depsipy.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+filterwarnings = ["ignore::DeprecationWarning"]
