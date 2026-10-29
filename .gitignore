@@ -11,3 +11,4 @@ benchmarks/out/
 runs/
 examples/
 *.tif
+.pytest_cache/
