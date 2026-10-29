@@ -1,7 +1,7 @@
 """Run the depsipy side of the benchmarks and (optionally) compare with Octave.
 
     python benchmarks/run_bench.py --scenario /tmp/dpbench
-    python benchmarks/run_bench.py --scenario /tmp/dpbench --with-octave ../ps_toolbox_v1.7.8.8_hhf
+    python benchmarks/run_bench.py --scenario /tmp/dpbench --with-octave workspace/ps_toolbox_v1.7.8.8_hhf
 
 The Octave side is driven from ``benchmarks/octave/bench_*.m``; when
 ``--with-octave`` is given this script also times the MATLAB implementation and

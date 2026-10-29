@@ -32,7 +32,7 @@ noise_amp=0.25, DS 幅度调制 σ=0.45, PS 幅度调制 σ=0.12)`，参数取�
 ## 复现
 
 ```bash
-cd workspace/depsipy
+cd depsi
 PYTHONPATH=src .venv/bin/python -m pytest tests/test_simulation_selection.py -q
 ```
 

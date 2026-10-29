@@ -112,7 +112,8 @@ def test_user_project_param_file():
     from pathlib import Path
 
     ref = (
-        Path(__file__).resolve().parents[2]
+        Path(__file__).resolve().parents[1]
+        / "workspace"
         / "Doris干涉加时序depsi"
         / "depsi时序"
         / "param_file.txt"

@@ -104,7 +104,7 @@
 ## 7. 复现命令
 
 ```bash
-cd workspace/depsipy
+cd depsi
 export PYTHONPATH=src
 
 # 1) 生成场景（同一份数据喂三方）
@@ -125,7 +125,7 @@ cd benchmarks/octave
 octave --no-gui --quiet dbg_core.m <toolbox_dir> /tmp/dpbench
 ```
 
-`<toolbox_dir>` 取 `../ps_toolbox_v1.7.8.8_hhf` 或 `../ps_toolbox/ps_toolbox`。
+`<toolbox_dir>` 取 `workspace/ps_toolbox_v1.7.8.8_hhf` 或 `workspace/ps_toolbox/ps_toolbox`。
 
 ## 8. Octave 侧需要的 shim（记录）
 

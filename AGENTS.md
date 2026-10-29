@@ -3,8 +3,8 @@
 本文件是本项目的**长期记忆**：已核实的事实、可复现命令、边界与当前决策。
 未核实的内容一律标注「待确认」，不得当作规则使用。
 
-- 项目根：`/home/zoneip/工程/Zoneip/depsi/workspace/depsipy`
-- 上级工作区：`/home/zoneip/工程/Zoneip/depsi/workspace`（含 MATLAB 原实现、Doris Python 链）
+- 项目根：`/home/zoneip/工程/Zoneip/depsi`（2026-10-29 已从 `workspace/depsipy` 展开到根目录）
+- 参考工作区：`workspace/`（含 MATLAB 原实现、Doris Python 链；不纳入仓库）
 - 工作方式：**会话式迭代 + 用户主导**（用户给方向与顺序；每轮汇报「完成/证据/缺口/待决」）
   - 用户 2026-10-29 指示：这是长任务，存在相当多不确定决策，**按用户思路推进，不做过多无用功**；
     数据与服务器随后提供（用户称可 100% 跑大规模任务）。因此：**不预先实现未经确认的功能**，
@@ -17,9 +17,9 @@
 跑同一条处理链，但显著更快、内存可控、可验证，并补齐原 Python 侧缺失的功能。
 
 上游事实：
-- MATLAB 主线：`../../ps_toolbox_v1.7.8.8_hhf/`（被二次修改，见 SPEC-001 §1）
-- MATLAB 旧线：`../../ps_toolbox/ps_toolbox/`（v1.7.7.5，参考/回退）
-- 干涉链（Python，RapidSAR/DORIS）：`../../Doris干涉加时序depsi/doris干涉/`
+- MATLAB 主线：`workspace/ps_toolbox_v1.7.8.8_hhf/`（被二次修改，见 SPEC-001 §1）
+- MATLAB 旧线：`workspace/ps_toolbox/ps_toolbox/`（v1.7.7.5，参考/回退）
+- 干涉链（Python，RapidSAR/DORIS）：`workspace/Doris干涉加时序depsi/doris干涉/`
 - 时序侧原先靠 `depsi_test.py` 调 `matlab -nodisplay`；**本项目要替换的就是这一步**
 
 ## 2. 目录职责
@@ -32,7 +32,7 @@ src/depsipy/
   simulate.py  合成项目生成器（写 DePSI 格式 + truth.npz）
   cli.py       `depsipy run|simulate|validate`
 tests/       单元测试（pytest）
-reference/   MATLAB 源码只读副本（对读用，不参与构建）
+reference/   MATLAB 源码只读副本（本地对读用，不纳入公开仓库）
 specs/       方案、ADR、验收标准
 rules/       现行架构/编码/质量门规则
 docs/        架构说明、对拍记录、用户文档
@@ -46,7 +46,7 @@ benchmarks/  耗时与规模基准
 ## 3. 可复现命令
 
 ```bash
-cd workspace/depsipy
+cd depsi
 python3 -m venv .venv && .venv/bin/pip install -e '.[fast,plot]'   # 首次
 .venv/bin/python -m pytest tests -q                                 # 质量门 1
 PYTHONPATH=src .venv/bin/python -m depsipy.cli --help
@@ -55,6 +55,10 @@ PYTHONPATH=src .venv/bin/python benchmarks/run_bench.py             # 基准
 
 环境（2026-10-29 实测）：Python 3.13.5、numpy 2.5.4、scipy 1.18.1、numba 0.68.1、
 16 vCPU、14 GiB RAM、**无 GPU**、**无 MATLAB**；已装 **Octave 9.4.0** 仅用于对拍（§4.8）。
+
+算力规划（用户 2026-10-29 告知）：后续会提供 **64 × 2 GB 显存的大机器**，
+算力不再是瓶颈；届时优先把向量化/批量核迁到该机器跑大规模验证。具体型号、
+CPU/内存/磁盘、驱动与 CUDA/加速器栈**待确认**；在拿到机器前仍按本机规格设计。
 
 ## 4. 已核实的关键事实（改动前必读）
 
@@ -72,7 +76,14 @@ PYTHONPATH=src .venv/bin/python benchmarks/run_bench.py             # 基准
    (a) `ps_set_globals` 会把同名**函数参数**遮蔽成空全局，驱动脚本必须先赋值；
    (b) Octave 的 `parfor` 串行，故 MATLAB 侧耗时是"未并行"的下界。
 
-## 5. 当前状态（每轮更新）
+## 5. 分支规划
+
+- `master`：当前 Python 实现（主开发线）。
+- `rust`：预留分支，未来 Rust 版本在此线开发；创建于 2026-10-29，与 master 同步起点。
+- 语言无关的规格（`specs/`）、规则（`rules/`）、对拍记录（`docs/parity.md`）与基准脚本
+  保留在 master；Rust 分支按需同步，不单独复制一份。
+
+## 6. 当前状态（每轮更新）
 
 - 已完成·已验证：raw I/O、参数解析、27 模型、LAMBDA+ILS、估计几何、合成器、
   PSC/PSP 选择（精度 1.00 / 单元覆盖率 1.00，见 docs/selection-calibration.md）；56 项测试
@@ -82,21 +93,21 @@ PYTHONPATH=src .venv/bin/python benchmarks/run_bench.py             # 基准
   整数解 3000/3000 相同）、selection 10.8×（400×400×20，PSC 逐个相同）；详见
   `docs/performance.md` 与 `benchmarks/results/`。对拍还发现并修复 2 个真 bug（见 §4.8）。
 - 未开始：大气分离/Kriging、加密、形变模型、噪声滤波、STC、输出与可视化、基准
-- 授权：沿用「仅限科研，禁止商用」，**暂不对外分发**（用户 2026-10-29 决策）
+- 授权：沿用「仅限科研，禁止商用」；2026-10-29 用户决策建立公开仓库（代码公开，许可不变）。
 
-## 6. 纪律
+## 7. 纪律
 
 - 改数值核前先跑 `pytest`；新增分支要有对应测试或不变量。
 - 不与 MATLAB 逐位对齐为目标；对齐的是**数学模型**，差异写入 `docs/parity.md`。
 - 不提交 `.venv/`、`*.raw`、`truth.npz`、`runs/`。
 - 不擅自提交/推送/删除归档；需要时先问。
 
-## 7. 待用户提供（阻塞项）
+## 8. 待用户提供（阻塞项）
 
 | # | 需要什么 | 用来决定什么 | 没它时不做的事 |
 | --- | --- | --- | --- |
 | 1 | 一份真实工程：`param_file.txt` + `input_file.txt` + 若干 `*.raw`（可只读） | 真实幅度/相位分布、`std_param` 是否合理、预处理链（RapidSAR）产物是否直接可读 | 调选择阈值、定性能常数、判断老版精度问题是否复现 |
-| 2 | 服务器画像：OS/核数/内存/磁盘、Python 版本、**是否有 MATLAB**、pip 能否联网 | 并行策略、内存上限、是否用 MATLAB 作对拍基准（比 Octave 可信） | 大规模基准、多进程/分块策略、CI |
+| 2 | ~~服务器画像~~ 已部分告知：未来提供 64 × 2 GB 显存大机器，算力不受限；具体型号/CPU/内存/磁盘/加速栈待确认 | 并行策略、是否上 GPU 核 | 在拿到机器前不做 GPU 专用实现 |
 | 3 | 优先级：先"跑通出产物"还是先"补功能（加密/形变模型/大气分离）" | M2 与 M5 的顺序 | 继续 M2 之后的实现 |
 
 已知可立即交付的东西（不需要新信息）：`depsipy` 的 raw I/O、参数解析、模型、LAMBDA/ILS、

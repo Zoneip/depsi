@@ -61,9 +61,9 @@
 
 ## 3. 约束
 
-- 运行环境：`python3.13`，`numpy 2.5` / `scipy 1.18` / `numba 0.68`（可选），16 核 / 14 GB / 无 GPU；venv 在 `workspace/depsipy/.venv`。
+- 运行环境：`python3.13`，`numpy 2.5` / `scipy 1.18` / `numba 0.68`（可选），16 核 / 14 GB / 无 GPU；venv 在 `.venv`。
 - 无 MATLAB、无 Octave，无法在线对照运行；因此**用合成器 + 数学不变量**代替对拍（见 §5）。
-- 许可证：原工具箱声明 "scientific use only, commercial prohibited"。`depsipy` 是独立重实现，但算法与文件格式沿用；商用需用户另行确认授权路径（**待用户决策**）。
+- 许可证：原工具箱声明 "scientific use only, commercial prohibited"。`depsipy` 是独立重实现，但算法与文件格式沿用；沿用同一科研许可，禁止商用（2026-10-29 用户决策）。
 - 会话式迭代：每轮汇报「完成了什么 / 证据 / 缺什么 / 下一步需谁确认」，由用户裁决优先级。
 
 ---
@@ -124,14 +124,14 @@
 | `Qahat` 病态（h2ph 近似常数） | 参数爆量 | 已改为 solve/Cholesky + 条件数检查 + pinv 兜底并告警 |
 | 用户真实数据巨大（GB 级 raw） | 内存/时间 | 流式 + memmap；`max_mem_buffer` 语义改为字节预算 |
 | 断点模型/加密/形变模型等复杂分支 | 功能缺口 | 按 §5 优先级逐轮补齐，缺口显式登记 |
-| 许可证 | 商用受限 | 待用户决策，不擅自改声明 |
+| 许可证 | 商用受限 | 沿用 DePSI 科研许可（仅限科研，禁止商用），2026-10-29 用户决策 |
 
 ---
 
 ## 8. 验证命令
 
 ```bash
-cd workspace/depsipy
+cd depsi
 .venv/bin/python -m pytest tests -q                     # 单元测试
 PYTHONPATH=src .venv/bin/python -m depsipy.cli simulate --out /tmp/sim1   # 生成合成项目
 PYTHONPATH=src .venv/bin/python -m depsipy.cli run /tmp/sim1/param_file.txt
@@ -140,6 +140,6 @@ PYTHONPATH=src .venv/bin/python -m depsipy.cli validate /tmp/sim1         # 与�
 
 ## 9. 待用户决策
 
-1. 是否在 `workspace/depsipy/` 初始化 `AGENTS.md` + `rules/` + `specs/` + `docs/` 治理结构（本文件所在位置即为 `specs/`）。
+1. ~~是否在 `workspace/depsipy/` 初始化治理结构~~ → 已完成；项目已展开到根目录 `/home/zoneip/工程/Zoneip/depsi`。
 2. 下一轮优先级：**(a)** 打通 1→7 组端到端（推荐，先拿到可用产物）；**(b)** 先把选择/估计做到极致性能并出基准；**(c)** 先补 11–12 组（大气分离/加密/形变模型）再打通。
 3. 商用授权口径（是否允许沿用 DePSI 算法与文件格式对外分发）。
