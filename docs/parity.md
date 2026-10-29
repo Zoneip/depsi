@@ -15,7 +15,7 @@
   （`depsi.m` 里 `breakpoint` 是用户输入的固定时刻）。
 - **影响**：使用 `breakpoint`/`breakpoint2` 且 `ps_model` 给出多个模型时，结果可能不同；
   单一模型时完全一致。
-- **还原**：不提供。若需研究原文行为，`reference/main/ps_model_definitions.m` 可读。
+- **还原**：不提供。若需研究原文行为，`reference/matlab/main/ps_model_definitions.m` 可读。
 
 ## P-02 · LAMBDA 搜索步数上限
 

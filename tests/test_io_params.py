@@ -97,7 +97,13 @@ def test_real_depsi_param_file():
     """The parameter template shipped with the toolbox must parse."""
     from pathlib import Path
 
-    ref = Path(__file__).resolve().parents[1] / "reference" / "templates" / "param_file.txt"
+    ref = (
+        Path(__file__).resolve().parents[1]
+        / "reference"
+        / "matlab"
+        / "templates"
+        / "param_file.txt"
+    )
     if not ref.exists():  # pragma: no cover
         pytest.skip("reference template not present")
     d = parse_param_file(ref)

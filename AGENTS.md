@@ -20,6 +20,10 @@
 - MATLAB 主线：`workspace/ps_toolbox_v1.7.8.8_hhf/`（被二次修改，见 SPEC-001 §1）
 - MATLAB 旧线：`workspace/ps_toolbox/ps_toolbox/`（v1.7.7.5，参考/回退）
 - 干涉链（Python，RapidSAR/DORIS）：`workspace/Doris干涉加时序depsi/doris干涉/`
+- 官方 Python 版：`reference/python/` = TUDelftGeodesy/DePSI（Apache-2.0，beta，
+  commit `51939cb`，2026-10-28）。架构与本项目不同：xarray/Dask + 模块化（network /
+  arc_estimation / atmosphere_estimation / densification / point_quality），不含 MATLAB 的
+  1–8 处理组一一对应关系；其 MATLAB 版在该仓库 `stable` 分支。
 - 时序侧原先靠 `depsi_test.py` 调 `matlab -nodisplay`；**本项目要替换的就是这一步**
 
 ## 2. 目录职责
@@ -32,7 +36,9 @@ src/depsipy/
   simulate.py  合成项目生成器（写 DePSI 格式 + truth.npz）
   cli.py       `depsipy run|simulate|validate`
 tests/       单元测试（pytest）
-reference/   MATLAB 源码只读副本（本地对读用，不纳入公开仓库）
+reference/   参考源码（仅本地，不纳入公开仓库）
+  matlab/      TU Delft MATLAB v1.7.8.8 原码（对读用）
+  python/      官方 Python 版 TUDelftGeodesy/DePSI（Apache-2.0，对读/架构参考）
 specs/       方案、ADR、验收标准
 rules/       现行架构/编码/质量门规则
 docs/        架构说明、对拍记录、用户文档
