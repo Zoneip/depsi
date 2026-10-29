@@ -125,7 +125,7 @@ def sidelobe_mask(
     keep = np.ones(r.size, dtype=bool)
     if theta_at is not None and r.size > 1:
         theta = theta_at(r, c)
-        keep = _decluster(r, c, theta, amp, coherence_threshold)
+        keep = _decluster(r, c, theta, amp[r, c], coherence_threshold)
     # everything that is a strong local maximum but did not survive is masked
     suppressed = np.zeros(r.size, dtype=bool)
     suppressed[~keep] = True
@@ -133,22 +133,22 @@ def sidelobe_mask(
     return mask
 
 
-def _decluster(rows, cols, theta, amp, threshold):
+def _decluster(rows, cols, theta, cand_amp, threshold):
     """Suppress candidates that are coherent with a stronger neighbour.
 
     Two sweeps (range then azimuth) followed by an iterative nearest-neighbour
     test, mirroring the ``GexYuu`` block of the modified ``ps_selection.m``:
-    a sidelobe is coherent with its main lobe but weaker, so the weaker of two
+    a side lobe is coherent with its main lobe but weaker, so the weaker of two
     coherent neighbours is dropped.
     """
     alive = np.ones(rows.size, dtype=bool)
 
-    def sweep(order_key, groups, group_vals):
+    def sweep(groups, group_vals):
         for gv in group_vals:
             idx = np.nonzero(groups == gv)[0]
             if idx.size < 2:
                 continue
-            idx = idx[np.argsort(order_key[idx])]
+            idx = idx[np.argsort(cand_amp[idx])]  # strongest first
             for k in range(idx.size - 1):
                 i0 = idx[k]
                 if not alive[i0]:
@@ -159,12 +159,9 @@ def _decluster(rows, cols, theta, amp, threshold):
                 coh = np.abs(np.exp(1j * (theta[rest] - theta[i0])).mean(axis=1))
                 alive[rest[coh > threshold]] = False
 
-    # range direction: fixed row, candidates ordered by amplitude
-    sweep(amp, rows, np.unique(rows))
-    # azimuth direction: fixed column
-    sweep(amp, cols, np.unique(cols))
+    sweep(rows, np.unique(rows))  # range direction: fixed row
+    sweep(cols, np.unique(cols))  # azimuth direction: fixed column
 
-    # iterative nearest-neighbour test
     alive_idx = np.nonzero(alive)[0]
     changed = True
     while changed and alive_idx.size > 1:
@@ -177,10 +174,10 @@ def _decluster(rows, cols, theta, amp, threshold):
             nz = d2 > 0
             if not nz.any():
                 continue
-            j = alive_idx[nz][np.argmin(d2[nz])]
+            j = alive_idx[nz][int(np.argmin(d2[nz]))]
             coh = abs(np.mean(np.exp(1j * (theta[i0] - theta[j]))))
             if coh > threshold:
-                drop = i0 if amp[rows[i0], cols[i0]] < amp[rows[j], cols[j]] else j
+                drop = i0 if cand_amp[i0] < cand_amp[j] else j
                 alive[drop] = False
                 alive_idx = np.nonzero(alive)[0]
                 changed = True
@@ -288,12 +285,12 @@ def select_psc_psp(
         acc1 = np.zeros((b1 - b0 + 1, Npixels), dtype=np.float64)
         acc2 = np.zeros_like(acc1)
         for k in range(sel.size):
-            i = int(sel[k])
-            nlines_file, cin = crop_in[i, 1] - crop_in[i, 0] + 1, crop_in[i]
+            cin = crop_in[int(sel[k]) - 1]  # MATLAB indices are 1-based
+            nlines_file = int(cin[1] - cin[0] + 1)
             loff = crop[0] - int(cin[0])
             poff = crop[2] - int(cin[2])
             block = _read_window(
-                slc_files[i], nlines_file, "cpxfloat32",
+                slc_files[int(sel[k]) - 1], nlines_file, "cpxfloat32",
                 b0 + loff, b1 + loff, 1 + poff, Npixels + poff,
             )
             a = np.abs(block) / cal[k]
@@ -316,13 +313,17 @@ def select_psc_psp(
 
     # ---- side-lobe mask ----------------------------------------------------
     def theta_at(rows, cols):
-        out = np.empty((rows.size, Nifgs), dtype=np.complex128)
+        """Phases of the candidate pixels, shape (Ncand, Nifgs) [rad]."""
+        out = np.empty((rows.size, Nifgs), dtype=float)
         for i in range(Nifgs):
-            nlines_file, cin = crop_in[i, 1] - crop_in[i, 0] + 1, crop_in[i]
+            cin = crop_in[i]
+            nlines_file = int(cin[1] - cin[0] + 1)
             loff = crop[0] - int(cin[0])
             poff = crop[2] - int(cin[2])
-            out[:, i] = read_pixels(
-                ifg_files[i], nlines_file, "cpxfloat32", rows + 1 + loff, cols + 1 + poff
+            out[:, i] = np.angle(
+                read_pixels(
+                    ifg_files[i], nlines_file, "cpxfloat32", rows + 1 + loff, cols + 1 + poff
+                )
             )
         return out
 
@@ -369,7 +370,8 @@ def select_psc_psp(
         phase = np.empty((rows.size, Nifgs))
         h2ph = np.empty((rows.size, Nifgs))
         for i in range(Nifgs):
-            nlines_file, cin = crop_in[i, 1] - crop_in[i, 0] + 1, crop_in[i]
+            cin = crop_in[i]
+            nlines_file = int(cin[1] - cin[0] + 1)
             loff = crop[0] - int(cin[0])
             poff = crop[2] - int(cin[2])
             phase[:, i] = np.angle(
@@ -378,12 +380,15 @@ def select_psc_psp(
             h2ph[:, i] = read_pixels(h2ph_files[i], nlines_file, "float32", rows + 1 + loff, cols + 1 + poff)
         amps = np.empty((rows.size, Nslc))
         for k in range(sel.size):
-            i = int(sel[k])
-            nlines_file, cin = crop_in[i, 1] - crop_in[i, 0] + 1, crop_in[i]
+            cin = crop_in[int(sel[k]) - 1]
+            nlines_file = int(cin[1] - cin[0] + 1)
             loff = crop[0] - int(cin[0])
             poff = crop[2] - int(cin[2])
             amps[:, k] = np.abs(
-                read_pixels(slc_files[i], nlines_file, "cpxfloat32", rows + 1 + loff, cols + 1 + poff)
+                read_pixels(
+                    slc_files[int(sel[k]) - 1], nlines_file, "cpxfloat32",
+                    rows + 1 + loff, cols + 1 + poff,
+                )
             )
         disp = amp_disp_sel[rows, cols]
         order = np.lexsort((cols, rows))
@@ -447,8 +452,8 @@ def _grid_select(amp_disp, grid_az, grid_r, Npsc_selections, threshold, ref_cn=N
                 continue
             idx = np.nonzero(ok)[0]
             vals = flat[idx]
-            for z in np.argsort(vals)[:Npsc_selections]:
-                p = int(idx[z])
+            for z, zi in enumerate(np.argsort(vals)[:Npsc_selections]):
+                p = int(idx[zi])
                 out[z].append((a0 - 1 + p // cell.shape[1], r0 - 1 + p % cell.shape[1]))
 
     # the reference point is always kept, even if its cell is above threshold

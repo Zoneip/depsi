@@ -67,9 +67,10 @@ PYTHONPATH=src .venv/bin/python benchmarks/run_bench.py             # 基准
 
 ## 5. 当前状态（每轮更新）
 
-- 已完成·已验证：raw I/O、参数解析、27 模型、LAMBDA+ILS、估计几何（48 项测试）
-- 代码完成·待验证：选择（PSC/PSP/旁瓣）、弧网+VCE、空间解缠
-- 进行中：pipeline/CLI/状态落盘、合成器跑通
+- 已完成·已验证：raw I/O、参数解析、27 模型、LAMBDA+ILS、估计几何、合成器、
+  PSC/PSP 选择（精度 1.00 / 单元覆盖率 1.00，见 docs/selection-calibration.md）；54 项测试
+- 代码完成·部分验证：弧网+VCE（VCE 待单测）、空间解缠（合成场已验证核心）
+- 进行中：pipeline/CLI/状态落盘（M2）
 - 未开始：大气分离/Kriging、加密、形变模型、噪声滤波、STC、输出与可视化、基准
 - 授权：沿用「仅限科研，禁止商用」，**暂不对外分发**（用户 2026-10-29 决策）
 

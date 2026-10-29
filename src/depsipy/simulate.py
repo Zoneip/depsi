@@ -208,8 +208,11 @@ def generate_project(
     amp_ds = amplitude * np.abs(rng.normal(size=shape) + 0.6)
     amp_field = np.where(ps_mask, amp_ps, amp_ds)
 
-    # per-pixel, per-scene amplitude modulation of distributed scatterers
+    # per-pixel, per-scene amplitude modulation: distributed scatterers fluctuate
+    # strongly (amplitude dispersion ~0.45), persistent scatterers only slightly
+    # (~0.10-0.15), which is what makes the amplitude-dispersion selection work
     ds_modulation = np.abs(rng.normal(1.0, 0.45, size=(Nslc,) + shape))
+    ps_modulation = np.abs(rng.normal(1.0, 0.12, size=(Nslc,) + shape))
     atmo_scene = np.array([_fractal_field(rng, shape, beta=2.7, scale=atmo_amp) for _ in range(Nslc)])
 
     # -- write rasters -------------------------------------------------------
@@ -221,7 +224,7 @@ def generate_project(
     for i in range(Nslc):
         phase = m2ph * h2ph_scene[i] * dem + m2ph * defo[i] + atmo_scene[i]
         slc_phases[i] = phase
-        amp = np.where(ps_mask, amp_field, amp_field * ds_modulation[i])
+        amp = np.where(ps_mask, amp_field * ps_modulation[i], amp_field * ds_modulation[i])
         noise = rng.normal(0, noise_amp / np.sqrt(nlooks_phase) * (1.0 + 3.0 * ~ps_mask), shape)
         slc = (amp * np.exp(1j * (phase + noise))).astype(np.complex64)
         p = workdir / f"slc_{i:03d}.raw"
@@ -232,7 +235,10 @@ def generate_project(
 
     for i in range(Nifgs):
         phase = m2ph * h2ph_scene[i] * dem + m2ph * defo[i] + atmo_scene[i]
-        amp = amp_field * np.where(ps_mask, 1.0, ds_modulation[i] * ds_modulation[master])
+        amp = amp_field * np.where(
+            ps_mask, ps_modulation[i] * ps_modulation[master],
+            ds_modulation[i] * ds_modulation[master],
+        )
         # interferometric noise grows with the number of looks lost
         noise = rng.normal(
             0, noise_amp * np.sqrt(2) / np.sqrt(nlooks_phase) * (1.0 + 3.0 * ~ps_mask), shape
