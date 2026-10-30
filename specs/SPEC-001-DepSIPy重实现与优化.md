@@ -1,6 +1,6 @@
 # SPEC-001 · DePSI 的 Python 重实现与性能优化
 
-状态：**草案 / 待 Review**（会话式迭代第 1 轮）
+状态：**执行中（2026-10-29）**：M0/M1 已完成，M2 MVP（组 2..8 主链）已完成；状态落盘与可视化未完成。本文件保留为方案与验收基线。
 作者：agent
 日期：2026-10-29
 
@@ -16,7 +16,7 @@
 | `ps_toolbox/ps_toolbox/` | MATLAB · 旧线 | v1.7.7.5，与主线同构，仅 `depsi.m` 1196 行（旧版）。可视为参考/回退点。 |
 | `Doris干涉加时序depsi/doris干涉/` | Python | DORIS 干涉处理脚本（RapidSAR，141 个 `.py`）：配准、干涉图、去平地、滤波、解缠、地理编码。**不含时序（PS）反演**。 |
 | `Doris干涉加时序depsi/depsi时序/` | 胶水 | `depsi_test.py` 只是 `os.system("matlab -nodisplay -r run('depsi_test.m')")`。即：**时序部分目前完全依赖 MATLAB**。 |
-| `InSAR_affair-shallow-2026-10-19/` | 独立项目 | DANI-NET 论文复现（PyTorch/昇腾），与本任务无关，仅共享 InSAR 领域。 |
+| `InSAR_affair-shallow-2026-10-19/` | 独立项目 | DANI-NET 论文复现（PyTorch/昇腾），与本任务无关；该副本已于 2026-10-29 从工作区移除。 |
 
 结论：用户所说的「原有 matlab 程序速度慢，python 版本功能不全」，准确含义是
 **干涉链已有 Python（RapidSAR），时序列（DePSI）只有 MATLAB，且慢**。
@@ -62,7 +62,9 @@
 ## 3. 约束
 
 - 运行环境：`python3.13`，`numpy 2.5` / `scipy 1.18` / `numba 0.68`（可选），16 核 / 14 GB / 无 GPU；venv 在 `.venv`。
-- 无 MATLAB、无 Octave，无法在线对照运行；因此**用合成器 + 数学不变量**代替对拍（见 §5）。
+- 本机当前无 MATLAB；用户可 **100% 提供 MATLAB 环境**（版本/Toolbox/接入时间待确认）。
+  当前用 **Octave 9.4.0** 作对拍通道，另有官方 Python 版
+  `reference/python/`（TUDelftGeodesy/DePSI，Apache-2.0）可作结构对读。
 - 许可证：原工具箱声明 "scientific use only, commercial prohibited"。`depsipy` 是独立重实现，但算法与文件格式沿用；沿用同一科研许可，禁止商用（2026-10-29 用户决策）。
 - 会话式迭代：每轮汇报「完成了什么 / 证据 / 缺什么 / 下一步需谁确认」，由用户裁决优先级。
 
@@ -78,7 +80,7 @@
 | 状态 | `npz` + `json`（替代 `_project.mat`） | HDF5 | 零依赖；大数组仍可 mmap |
 | 解缠 | 同一法方程、稀疏因子化一次解全部 ifg | 逐弧循环 | 数学等价、量级提速 |
 | VCE | 用 `Qy1_k` 的秩 1 结构把 trace 化简为闭式 | 按定义算 trace | 等价且把 O(Nsig²·Nifgs³) 降为 O(Nsig²) |
-| 验收 | 合成数据 + 真值 RMS + 单元测试 | 与 MATLAB 逐位对拍 | 环境无 MATLAB；且对拍本身不验证物理正确性 |
+| 验收 | 合成数据 + 真值 RMS + 单元测试 + Octave 对拍 | 与 MATLAB 逐位对拍 | 本机无 MATLAB；Octave 代跑可对拍，逐位一致不作目标 |
 
 ---
 
@@ -91,15 +93,15 @@
 | T3 | 27 个功能模型 + 断点模型 | **已完成·已验证** | `test_functional_model_columns`、`test_breakpoint_model_*` |
 | T4 | LAMBDA（`ldldecom`/`decorrel`/`chistart`/`lsearch`）+ numba 核 | **已完成·已验证** | 与穷举枚举对拍；numba 与参考实现 12 组参数一致 |
 | T5 | 几何/估计（`Qahat`、`rhs_fixed`、OMT、ensemble coherence） | **已完成·已验证** | 噪声自由时参数精确复原；ILS 在 `Qahat` 度量下对 ±1 邻域最优 |
-| T6 | PSC/PSP 选择 + 旁瓣掩膜 + 网格选取 | **代码完成·待验证** | `steps/selection.py`，尚无端到端证据 |
+| T6 | PSC/PSP 选择 + 旁瓣掩膜 + 网格选取 | **已完成·已验证** | `steps/selection.py`；M1 精度 1.00 / 覆盖率 1.00，见 `docs/selection-calibration.md` |
 | T7 | 弧网（Delaunay / spider）+ VCE | **代码完成·部分验证** | VCE 秩 1 化简待单测 |
 | T8 | 空间解缠（整数场 LS + 相位 LS） | **代码完成·已验证核心** | 合成 PS 场：整数模糊度正确时误差 0；20/407 弧被破坏仍可完全恢复 |
-| T9 | 合成数据生成器（真值） | **代码完成·待跑通** | `simulate.py` |
-| T10 | 每组串起来的 pipeline + CLI + 状态落盘 | **进行中** | `pipeline.py`/`cli.py` 未写 |
-| T11 | 分离大气（时间滤波 + Kriging） | **未开始** | — |
-| T12 | PS 加密、形变模型（bowl）、噪声滤波、STC | **未开始** | — |
-| T13 | 输出（`_defo/_trend/_resfile`、GeoTIFF/CSV）与可视化 | **未开始** | — |
-| T14 | 基准报告（vs MATLAB 复杂度/实测）与 `docs/parity.md` | **未开始** | — |
+| T9 | 合成数据生成器（真值） | **已完成·已跑通** | `simulate.py`；M1 合成工程与真值比对通过 |
+| T10 | 每组串起来的 pipeline + CLI + 状态落盘 | **部分完成（M2 MVP）** | `pipeline.py`/`cli.py` 已实现，`depsipy run` 跑组 2..8；`tests/test_pipeline.py`（7 项）；**无状态落盘/续算** |
+| T11 | 分离大气（时间滤波 + Kriging） | **部分完成** | `steps/filtering.py` + `steps/kriging.py`，滤波已接 pipeline 并写 `_psc_atmo_filt_sel*`；Kriging 尚未把 APS 插值到 PSP |
+| T12 | PS 加密、形变模型（bowl）、噪声滤波、STC | **部分完成** | 加密/噪声/STC 已接 pipeline（`test_pipeline.py`）；缺幅度分箱迭代、`mode_fix`、bowl 模型（`defo_method=[]`） |
+| T13 | 输出（`_defo/_trend/_resfile`、GeoTIFF/CSV）与可视化 | **部分完成** | `_ps_results_*`/点栈/CSV/resfile/summary 已落盘；整幅 `_defo`/`_trend` 栅格、GeoTIFF 与可视化未实现 |
+| T14 | 基准报告（vs MATLAB 复杂度/实测）与 `docs/parity.md` | **部分完成（v0）** | `docs/performance.md` v0 实测、`docs/parity.md` P-01…P-09 |
 
 ---
 
@@ -111,7 +113,7 @@
      （含可达真 PS 的单元都产出 PSC）——像素级召回按设计天然 ≈ 格数/PS 数，不作为指标；
    - 主分量 PS 的**线性速率**与真值相关系数 ≥ 0.95，RMS 误差 ≤ 30% 真值标准差；
    - 参考点、PS 数、弧数写进 resfile。
-3. 单元测试全绿（当前 48 项）。
+3. 单元测试全绿（当前 56 项）。
 4. 性能基准：`benchmarks/` 下给出各步骤耗时表；选择与估计两步相对 MATLAB 同算法的理论复杂度下降 ≥ 10×（用 I/O 字节数与标量运算数估算，并标注为估算）。
 
 ---
@@ -120,7 +122,7 @@
 
 | 风险 | 影响 | 处置 |
 | --- | --- | --- |
-| 无 MATLAB 对照 | 语义偏差不可见 | 逐函数对读源码 + 记录 `docs/parity.md`；关键处写不变量测试 |
+| 无 MATLAB 对照 | 语义偏差不可见 | Octave 代跑 + 逐函数对读源码 + 记录 `docs/parity.md`；关键处写不变量测试 |
 | `Qahat` 病态（h2ph 近似常数） | 参数爆量 | 已改为 solve/Cholesky + 条件数检查 + pinv 兜底并告警 |
 | 用户真实数据巨大（GB 级 raw） | 内存/时间 | 流式 + memmap；`max_mem_buffer` 语义改为字节预算 |
 | 断点模型/加密/形变模型等复杂分支 | 功能缺口 | 按 §5 优先级逐轮补齐，缺口显式登记 |
@@ -142,4 +144,5 @@ PYTHONPATH=src .venv/bin/python -m depsipy.cli validate /tmp/sim1         # 与�
 
 1. ~~是否在 `workspace/depsipy/` 初始化治理结构~~ → 已完成；项目已展开到根目录 `/home/zoneip/工程/Zoneip/depsi`。
 2. 下一轮优先级：**(a)** 打通 1→7 组端到端（推荐，先拿到可用产物）；**(b)** 先把选择/估计做到极致性能并出基准；**(c)** 先补 11–12 组（大气分离/加密/形变模型）再打通。
-3. 商用授权口径（是否允许沿用 DePSI 算法与文件格式对外分发）。
+3. ~~商用授权口径（是否允许沿用 DePSI 算法与文件格式对外分发）~~ → 2026-10-29 决策：建立公开仓库 `github.com/Zoneip/depsi`，License 沿用 DePSI 科研许可（禁止商用）。
+4. 未来 Rust 版本：已预留 `rust` 分支（2026-10-29），当前不改 Python 主线结构。

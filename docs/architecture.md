@@ -1,5 +1,9 @@
 # 架构
 
+状态：**现行（2026-10-29）**。`io/`、`core/`、`steps/`、`simulate.py`、`pipeline.py`
+与 `cli.py` 均已实现；§1 的 `runs/<id>/state.npz` 与 `manifest.json`（跨进程状态落盘）尚未实现，
+其余数据流已按 `depsipy run` 串联并可执行。
+
 ## 1. 数据流
 
 ```text
@@ -35,9 +39,18 @@ input_file.txt ─┴─► pipeline.py ─► [组1 初始化] ─► [组2 选
 | `steps/selection.py` | 幅度流式统计、PSC/PSP、旁瓣掩膜、网格选取 | `ps_selection.m` |
 | `steps/network.py` | Delaunay/spider 弧网、独立弧、方差分量 | `ps_form_network.m`/`ps_vce.m` |
 | `steps/unwrapping.py` | 整数场最小二乘 + 修正，相位最小二乘 | `ps_spatial_unwrapping.m` |
+| `io/doris.py` | Doris/RapidSAR 产物读取（MFF 头、`.r00/.x00/.j00`、`.res` 元数据/轨道） | `metadataNew.m`（Doris `.res` 约定） |
+| `core/orbit.py` | 精密轨道多项式拟合 + 样条状态插值 | `intrp_orbit.m` |
+| `steps/geocoding.py` | WGS84↔ECEF、`lph2xyz`/`xyz2t`/`xyz2lp`、雷达→大地 | `lph2xyz.m`/`xyz2t.m`/`xyz2lp.m`/`xyz2ell.m` |
+| `steps/densification.py` | KDTree 连接 + 批量 ILS + 2of3/3of3 | `ps_densification.m` |
+| `steps/filtering.py` `kriging.py` | 大气/非线性分离、变差函数与 Kriging | `ps_filtering.m`/`ps_atmo_kriging.m` |
+| `steps/noise_filter.py` `stc.py` | 时间维平滑、时空一致性 | `ps_noise_filter.m`/`ps_spatio_temporal_consistency.m` |
+| `pipeline.py` `cli.py` | 处理组 2..8 编排与 `depsipy run` | `depsi.m` |
 | `simulate.py` | 合成工程 + 真值 | `depsi_sim.m`（重构版） |
 
-## 3. 状态格式
+## 3. 状态格式（**未实现**，M2 只剩这一项）
+
+当前每次 `depsipy run` 从头重算，只写 `_summary.json`。规划的跨进程续算格式如下（尚未落地）：
 
 `runs/<project_id>/manifest.json`
 

@@ -26,7 +26,14 @@ import numpy as np
 from .lambda_ils import LambdaModel
 from .models import NPAR_MAX, build_functional_model, model_spec
 
-__all__ = ["Geometry", "build_geometry", "EstimationResult", "estimate_arcs"]
+__all__ = [
+    "Geometry",
+    "build_geometry",
+    "stochastic_sig2",
+    "covariance_qy1",
+    "EstimationResult",
+    "estimate_arcs",
+]
 
 
 #: above this condition number the normal-matrix inverse is treated as singular
@@ -87,6 +94,31 @@ class Geometry:
         return None
 
 
+def stochastic_sig2(model: int, Nifgs: int, sig2_est: np.ndarray | None) -> np.ndarray:
+    """Variance components of ``Qy1`` (master term first, then one per interferogram)."""
+    if sig2_est is None:
+        # MATLAB: (pi*15/180)^2 and (pi*30/180)^2 -- i.e. 15 deg and 30 deg in
+        # radians squared.  NB: dividing by 180 is *not* the same as multiplying
+        # by pi/180 (a bug that inflated sig2 by (pi/180)^-2 = 3283).
+        if model == 1:  # master atmosphere stochastic
+            return np.concatenate(
+                ([np.deg2rad(15.0) ** 2], np.full(Nifgs, np.deg2rad(20.0) ** 2))
+            )
+        return np.concatenate(([0.0], np.full(Nifgs, np.deg2rad(30.0) ** 2)))
+    sig2 = np.asarray(sig2_est, dtype=float).ravel()
+    if sig2.size != Nifgs + 1:
+        raise ValueError(f"sig2_est must have {Nifgs + 1} entries, got {sig2.size}")
+    return sig2
+
+
+def covariance_qy1(sig2: np.ndarray) -> np.ndarray:
+    """``Qy1 = 2*sig2[0]*ones + diag(2*sig2[1:])``."""
+    Nifgs = sig2.size - 1
+    Qy1 = np.full((Nifgs, Nifgs), 2.0 * sig2[0])
+    Qy1[np.diag_indices(Nifgs)] += 2.0 * sig2[1:]
+    return Qy1
+
+
 def build_geometry(
     model: int,
     Nifgs: int,
@@ -123,24 +155,9 @@ def build_geometry(
         breakpoint2=breakpoint2,
     )
 
-    if sig2_est is None:
-        # MATLAB: (pi*15/180)^2 and (pi*30/180)^2 -- i.e. 15 deg and 30 deg in
-        # radians squared.  NB: dividing by 180 is *not* the same as multiplying
-        # by pi/180 (a bug that inflated sig2 by (pi/180)^-2 = 3283).
-        if model == 1:  # master atmosphere stochastic
-            sig2 = np.concatenate(
-                ([np.deg2rad(15.0) ** 2], np.full(Nifgs, np.deg2rad(20.0) ** 2))
-            )
-        else:
-            sig2 = np.concatenate(([0.0], np.full(Nifgs, np.deg2rad(30.0) ** 2)))
-    else:
-        sig2 = np.asarray(sig2_est, dtype=float).ravel()
-        if sig2.size != Nifgs + 1:
-            raise ValueError(f"sig2_est must have {Nifgs + 1} entries, got {sig2.size}")
+    sig2 = stochastic_sig2(model, Nifgs, sig2_est)
 
-    # Qy1 = 2*sig2[0] * ones + diag(2*sig2[1:])
-    Qy1 = np.full((Nifgs, Nifgs), 2.0 * sig2[0])
-    Qy1[np.diag_indices(Nifgs)] += 2.0 * sig2[1:]
+    Qy1 = covariance_qy1(sig2)
 
     A1 = -2 * np.pi * np.eye(Nifgs)
     A = np.vstack([A1, np.zeros((Npar, Nifgs))])

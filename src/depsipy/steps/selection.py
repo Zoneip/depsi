@@ -122,67 +122,176 @@ def sidelobe_mask(
         return mask
 
     r, c = np.nonzero(strong)  # r = row index (0-based)
-    keep = np.ones(r.size, dtype=bool)
+    kept = np.arange(r.size)
     if theta_at is not None and r.size > 1:
         theta = theta_at(r, c)
-        keep = _decluster(r, c, theta, amp[r, c], coherence_threshold)
+        kept = _decluster(r, c, theta, amp[r, c], coherence_threshold)
     # everything that is a strong local maximum but did not survive is masked
-    suppressed = np.zeros(r.size, dtype=bool)
-    suppressed[~keep] = True
+    suppressed = np.ones(r.size, dtype=bool)
+    suppressed[kept] = False
     mask[r[suppressed], c[suppressed]] = True
     return mask
 
 
 def _decluster(rows, cols, theta, cand_amp, threshold):
-    """Suppress candidates that are coherent with a stronger neighbour.
+    """Suppress strong candidates that are coherent with a stronger neighbour.
 
-    Two sweeps (range then azimuth) followed by an iterative nearest-neighbour
-    test, mirroring the ``GexYuu`` block of the modified ``ps_selection.m``:
-    a side lobe is coherent with its main lobe but weaker, so the weaker of two
-    coherent neighbours is dropped.
+    Port of the ``GexYuu`` block of ``ps_selection.m``: a range sweep (per row),
+    an azimuth sweep (per column) and a nearest-neighbour pass.  Each sweep takes
+    the **strongest remaining** candidate as the reference and removes the
+    contiguous run of coherent candidates around it; the nearest-neighbour pass
+    drops the weaker member of every coherent pair (simultaneously per pass, as
+    the reference does).
+
+    ``theta`` holds the interferometric phases ``(Ncand, Nifgs)``; ``threshold`` is
+    the coherence threshold (0.95 in the reference).
     """
-    alive = np.ones(rows.size, dtype=bool)
+    cand_amp = np.asarray(cand_amp, dtype=float)
+    theta_c = np.exp(1j * np.asarray(theta, dtype=float))
+    n_ifg = theta_c.shape[1]
+    if n_ifg == 0:
+        return np.arange(rows.size)
 
-    def sweep(groups, group_vals):
-        for gv in group_vals:
-            idx = np.nonzero(groups == gv)[0]
-            if idx.size < 2:
+    def sweep(kept, group_coord, sort_coord):
+        """One directional sweep over the candidates still alive."""
+        groups = group_coord[kept]
+        idx_alive = kept
+        out = []
+        for gv in np.unique(groups):
+            members = np.nonzero(groups == gv)[0]
+            if members.size == 1:
+                out.append(idx_alive[members[0]])
                 continue
-            idx = idx[np.argsort(cand_amp[idx])]  # strongest first
-            for k in range(idx.size - 1):
-                i0 = idx[k]
-                if not alive[i0]:
-                    continue
-                rest = idx[k + 1 :][alive[idx[k + 1 :]]]
-                if rest.size == 0:
-                    continue
-                coh = np.abs(np.exp(1j * (theta[rest] - theta[i0])).mean(axis=1))
-                alive[rest[coh > threshold]] = False
+            order = members[np.argsort(sort_coord[idx_alive[members]], kind="stable")]
+            idx = idx_alive[order]
+            amp_eff = cand_amp[idx].astype(float).copy()
+            ph = theta_c[idx]
+            coh = np.abs(ph @ np.conj(ph).T) / n_ifg
+            removed = np.zeros(idx.size, dtype=bool)
+            while True:
+                m = int(np.argmax(amp_eff))
+                out.append(idx[m])  # the reference max is always kept
+                row = coh[m]
+                not_coh = (row <= threshold) | removed
+                pos = np.nonzero(not_coh[m + 1 :])[0]
+                max_i = m + int(pos[0]) if pos.size else idx.size - 1
+                neg = np.nonzero(not_coh[:m])[0]
+                min_i = int(neg[-1]) + 1 if neg.size else 0
+                removed[min_i : max_i + 1] = True
+                amp_eff[min_i : max_i + 1] = -np.inf
+                if removed.all():
+                    break
+        return np.asarray(sorted(out), dtype=np.int64)
 
-    sweep(rows, np.unique(rows))  # range direction: fixed row
-    sweep(cols, np.unique(cols))  # azimuth direction: fixed column
+    kept = np.arange(rows.size, dtype=np.int64)
+    kept = sweep(kept, rows, cols)  # range direction: fixed row, order by column
+    kept = sweep(kept, cols, rows)  # azimuth direction: fixed column, order by row
+    if kept.size < 2:
+        return kept
 
-    alive_idx = np.nonzero(alive)[0]
-    changed = True
-    while changed and alive_idx.size > 1:
-        changed = False
-        for k, i0 in enumerate(alive_idx):
-            if not alive[i0]:
-                continue
-            d2 = (cols[alive_idx] - cols[i0]) ** 2 + (rows[alive_idx] - rows[i0]) ** 2
-            d2[k] = 0
-            nz = d2 > 0
-            if not nz.any():
-                continue
-            j = alive_idx[nz][int(np.argmin(d2[nz]))]
-            coh = abs(np.mean(np.exp(1j * (theta[i0] - theta[j]))))
-            if coh > threshold:
-                drop = i0 if cand_amp[i0] < cand_amp[j] else j
-                alive[drop] = False
-                alive_idx = np.nonzero(alive)[0]
-                changed = True
-                break
-    return np.nonzero(alive)[0]
+    # nearest-neighbour pass: drop the weaker member of every coherent pair
+    alive = np.zeros(rows.size, dtype=bool)
+    alive[kept] = True
+    alive_idx = kept.copy()
+    while alive_idx.size > 1:
+        near = _nearest_positive(alive_idx, alive_idx, rows, cols)
+        has = near >= 0
+        if not has.any():
+            break
+        ii, jj = alive_idx[has], near[has]
+        coh = np.abs(np.einsum("ij,ij->i", theta_c[ii], np.conj(theta_c[jj]))) / n_ifg
+        hit = coh > threshold
+        if not hit.any():
+            break
+        weaker = np.where(cand_amp[ii] < cand_amp[jj], ii, jj)
+        drop = np.unique(weaker[hit])
+        alive[drop] = False
+        alive_idx = np.nonzero(alive)[0]
+    return alive_idx
+
+
+def _nearest_positive(query, pool, rows, cols, *, block: int = 512):
+    """Nearest member of ``pool`` with strictly positive distance, per query.
+
+    Returns absolute candidate indices, ``-1`` where no such neighbour exists.
+    Ties resolve to the lowest position in ``pool`` (matching ``np.argmin`` over
+    the original ordered scan); entries at identical coordinates are excluded,
+    exactly like the reference loop's ``d2 > 0`` mask.
+
+    Large pools go through a k-d tree; the blocked quadratic path is kept as the
+    exact fallback (and is used directly for small pools).
+    """
+    query = np.asarray(query, dtype=np.int64)
+    pool = np.asarray(pool, dtype=np.int64)
+    if pool.size > 512 and query.size > 32:
+        tree_based = _nearest_positive_kdtree(query, pool, rows, cols)
+        if tree_based is not None:
+            return tree_based
+    return _nearest_positive_blocked(query, pool, rows, cols, block=block)
+
+
+def _nearest_positive_kdtree(query, pool, rows, cols):
+    """k-d tree path; returns ``None`` when ties cannot be resolved safely.
+
+    Distances are sorted by the tree, so the first strictly positive neighbour is
+    the nearest one; only rows whose nearest distance is attained by several pool
+    entries need the exact tie-break (lowest pool position, as ``argmin`` over the
+    reference order gives).  Duplicate coordinates at distance zero are skipped.
+    """
+    from scipy.spatial import cKDTree
+
+    pts = np.column_stack([cols[pool].astype(np.float64), rows[pool].astype(np.float64)])
+    tree = cKDTree(pts)
+    k = min(16, pool.size)
+    dist, idx = tree.query(pts[query] if query is not pool else pts, k=k)
+    dist = np.atleast_2d(dist)
+    idx = np.atleast_2d(idx)
+    n_rows = dist.shape[0]
+    positive = dist > 0
+    has = positive.any(axis=1)
+    if not has.all():
+        return None  # all k neighbours coincide with the query point
+    first = np.argmax(positive, axis=1)
+    d_min = dist[np.arange(n_rows), first]
+    tol = d_min * (1 + 16 * np.finfo(float).eps)
+    tied = positive & (dist <= tol[:, None])
+    out = pool[idx[np.arange(n_rows), first]].astype(np.int64)
+    ambiguous = np.nonzero(tied.sum(axis=1) > 1)[0]
+    for row in ambiguous:
+        cand = [int(pos) for pos in tree.query_ball_point(pts[query[row]], tol[row])
+                if dist2(pts[query[row]], pts[pos]) > 0]
+        if not cand:  # pragma: no cover - defensive
+            return None
+        out[row] = pool[min(cand)]
+    return out
+
+
+def dist2(a, b):
+    dx = a[0] - b[0]
+    dy = a[1] - b[1]
+    return dx * dx + dy * dy
+
+
+def _nearest_positive_blocked(query, pool, rows, cols, *, block: int = 512):
+    """Exact quadratic path with the reference tie-breaking rule."""
+    query = np.asarray(query, dtype=np.int64)
+    pool = np.asarray(pool, dtype=np.int64)
+    out = np.full(query.size, -1, dtype=np.int64)
+    if pool.size == 0:
+        return out
+    rq = rows[query].astype(np.float64)
+    cq = cols[query].astype(np.float64)
+    rp = rows[pool].astype(np.float64)
+    cp = cols[pool].astype(np.float64)
+    for start in range(0, query.size, block):
+        stop = min(start + block, query.size)
+        d2 = (cq[start:stop, None] - cp[None, :]) ** 2 + (rq[start:stop, None] - rp[None, :]) ** 2
+        finite = np.isfinite(d2) & (d2 > 0)
+        d2 = np.where(finite, d2, np.inf)
+        best = np.argmin(d2, axis=1)
+        ok = finite[np.arange(stop - start), best]
+        out[start:stop] = np.where(ok, pool[best], -1)
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -214,6 +323,9 @@ class SelectionResult:
     psp_az: list[np.ndarray] = field(default_factory=list)
     psp_r: list[np.ndarray] = field(default_factory=list)
     psp_amp_disp: list[np.ndarray] = field(default_factory=list)
+    psp_phase: list[np.ndarray] = field(default_factory=list)
+    psp_h2ph: list[np.ndarray] = field(default_factory=list)
+    psp_amp: list[np.ndarray] = field(default_factory=list)
     mean_amp: np.ndarray | None = None
     amp_disp: np.ndarray | None = None
     side_lobe: np.ndarray | None = None
@@ -358,6 +470,34 @@ def select_psc_psp(
     psp_r_idx, psp_c_idx = np.nonzero(psp_mask)
     psp_disp = amp_disp_sel[psp_r_idx, psp_c_idx]
 
+    # ---- read the observations at the PSP pixels --------------------------
+    Npsp = psp_r_idx.size
+    psp_phase = np.empty((Npsp, Nifgs))
+    psp_h2ph = np.empty((Npsp, Nifgs))
+    psp_amp = np.empty((Npsp, Nslc))
+    for i in range(Nifgs):
+        cin = crop_in[i]
+        nlines_file = int(cin[1] - cin[0] + 1)
+        loff = crop[0] - int(cin[0])
+        poff = crop[2] - int(cin[2])
+        psp_phase[:, i] = np.angle(
+            read_pixels(ifg_files[i], nlines_file, "cpxfloat32",
+                        psp_r_idx + 1 + loff, psp_c_idx + 1 + poff)
+        )
+        psp_h2ph[:, i] = read_pixels(
+            h2ph_files[i], nlines_file, "float32",
+            psp_r_idx + 1 + loff, psp_c_idx + 1 + poff,
+        )
+    for k in range(sel.size):
+        cin = crop_in[int(sel[k]) - 1]
+        nlines_file = int(cin[1] - cin[0] + 1)
+        loff = crop[0] - int(cin[0])
+        poff = crop[2] - int(cin[2])
+        psp_amp[:, k] = np.abs(
+            read_pixels(slc_files[int(sel[k]) - 1], nlines_file, "cpxfloat32",
+                        psp_r_idx + 1 + loff, psp_c_idx + 1 + poff)
+        )
+
     # ---- read phases at the selected pixels -------------------------------
     psc_lists: list[list[PSCCandidate]] = []
     for z in range(Npsc_selections):
@@ -416,6 +556,9 @@ def select_psc_psp(
         psp_az=[psp_r_idx + 1] * Npsc_selections,
         psp_r=[psp_c_idx + 1] * Npsc_selections,
         psp_amp_disp=[psp_disp] * Npsc_selections,
+        psp_phase=[psp_phase] * Npsc_selections,
+        psp_h2ph=[psp_h2ph] * Npsc_selections,
+        psp_amp=[psp_amp] * Npsc_selections,
         mean_amp=sum_amp,
         amp_disp=amp_disp_map,
         side_lobe=sl,
@@ -539,9 +682,36 @@ def write_psc_files(result: SelectionResult, workspace, project_id: str, Nifgs: 
         r = np.asarray(result.psp_r[z])
         n = az.size
         Nifgs = result.psc[z][0].phase.size if result.psc[z] else Nifgs
-        data = np.zeros((n, 2 * Nifgs + 4))
-        data[:, 0] = 1
-        data[:, 1] = 0
+        phase = (
+            np.asarray(result.psp_phase[z])
+            if z < len(result.psp_phase) and result.psp_phase[z] is not None
+            else np.zeros((n, Nifgs))
+        )
+        h2ph = (
+            np.asarray(result.psp_h2ph[z])
+            if z < len(result.psp_h2ph) and result.psp_h2ph[z] is not None
+            else np.zeros((n, Nifgs))
+        )
+        if phase.shape != (n, Nifgs) or h2ph.shape != (n, Nifgs):
+            raise ValueError("PSP phase/h2ph shape does not match az/r")
+        cell_a = np.searchsorted(result.grid_az[:, 0], az, side="right") - 1
+        cell_r = np.searchsorted(result.grid_r[:, 0], r, side="right") - 1
+        cell_a = np.clip(cell_a, 0, result.grid_az.shape[0] - 1)
+        cell_r = np.clip(cell_r, 0, result.grid_r.shape[0] - 1)
+        data = np.empty((n, 2 * Nifgs + 4))
+        data[:, 0] = cell_a
+        data[:, 1] = cell_r
         data[:, 2] = az
         data[:, 3] = r
+        data[:, 4 : 4 + Nifgs] = phase
+        data[:, 4 + Nifgs :] = h2ph
         write_raw(workspace / f"{project_id}_psp_2orig_sel{z + 1}.raw", data, "float64")
+
+        amp_disp = np.asarray(result.psp_amp_disp[z]).ravel()
+        amp = (
+            np.asarray(result.psp_amp[z])
+            if z < len(result.psp_amp) and result.psp_amp[z] is not None
+            else np.zeros((n, 0))
+        )
+        validation = np.column_stack([amp_disp, amp]) if amp.size else amp_disp[:, None]
+        write_raw(workspace / f"{project_id}_psp_validation_sel{z + 1}.raw", validation, "float64")

@@ -87,13 +87,15 @@ def remove_untestable(arcs: np.ndarray, min_connections: int = 3):
     return arcs, removed_all
 
 
-def _normal_matrix(arcs, Nnodes, weights, fixed_cols):
+def _normal_matrix(arcs, Nnodes, weights, free_cols):
     """Build ``A' W A`` and ``A' W`` restricted to the free columns.
 
     ``A`` has -1 in the first node and +1 in the second node of each arc, so the
-    adjustment estimates the PS phase differences.  ``fixed_cols`` (references)
-    are removed from the unknowns and moved to the right-hand side implicitly by
-    simply dropping their columns.
+    adjustment estimates the PS phase differences.  ``free_cols`` is a boolean
+    mask over the nodes (references and nodes without arcs are excluded); their
+    columns are dropped from the unknowns, which is how the references are moved
+    to the right-hand side.  A node without arcs must be dropped as well, or its
+    zero column makes the normal matrix singular.
     """
     narcs = arcs.shape[0]
     rows = np.repeat(np.arange(narcs), 2)
@@ -101,13 +103,121 @@ def _normal_matrix(arcs, Nnodes, weights, fixed_cols):
     vals = np.tile(np.array([-1.0, 1.0]), narcs)
     A = sp.csr_matrix((vals, (rows, cols)), shape=(narcs, Nnodes))
 
-    free = np.ones(Nnodes, dtype=bool)
-    free[fixed_cols] = False
-    Af = A[:, free]
+    Af = A[:, np.asarray(free_cols, dtype=bool)]
     W = sp.diags(weights) if np.ndim(weights) else sp.identity(narcs) * weights
     N = (Af.T @ W @ Af).tocsc()
     AtW = (Af.T @ W).tocsr()
     return Af, N, AtW
+
+
+def _resolve_integer_field_loop(Y, Af, AtW, solve, weights, max_fixups, tol):
+    """Reference per-IFG correction loop, retained for parity tests."""
+    Y = np.asarray(Y, dtype=float).copy()
+    n_fixups = np.zeros(Y.shape[1], dtype=int)
+    for v in range(Y.shape[1]):
+        y = Y[:, v].copy()
+        skip = 0
+        prev = -1
+        for _ in range(max_fixups):
+            rhs = AtW @ y
+            x = solve(rhs)
+            e = y - Af @ x
+            omt = float(e @ (weights * e))
+            if omt <= tol:
+                break
+            if skip == 0:
+                idx = int(np.argmax(np.abs(e)))
+            else:
+                order = np.argsort(np.abs(e))
+                idx = int(order[-min(skip + 1, order.size)])
+            if idx == prev:
+                skip += 1
+                continue
+            skip = 0
+            step = -np.round(e[idx])
+            if step == 0:
+                step = -np.sign(e[idx]) if e[idx] != 0 else 1.0
+            y[idx] += step
+            n_fixups[v] += 1
+            prev = idx
+        Y[:, v] = y
+    return Y, n_fixups
+
+
+def _resolve_integer_field_batched(Y, Af, AtW, solve, weights, max_fixups, tol):
+    """Correction loop with all interferograms advanced in one right-hand side.
+
+    Each IFG keeps its own sequential skip/prev state; only the outer IFG loop
+    is batched.  This preserves the per-IFG decision rules while turning
+    ``Nifgs`` sparse solves per iteration into one.
+    """
+    Y = np.asarray(Y, dtype=float).copy()
+    n_arcs, n_ifgs = Y.shape
+    n_fixups = np.zeros(n_ifgs, dtype=int)
+    if n_ifgs == 0 or max_fixups <= 0:
+        return Y, n_fixups
+
+    active = np.arange(n_ifgs)
+    skip = np.zeros(n_ifgs, dtype=int)
+    prev = np.full(n_ifgs, -1, dtype=int)
+    iters = np.zeros(n_ifgs, dtype=int)
+
+    while active.size:
+        cols = active
+        rhs = AtW @ Y[:, cols]
+        x = solve(rhs)
+        e = Y[:, cols] - Af @ x
+        omt = np.sum(e * (weights[:, None] * e), axis=0)
+        converged = omt <= tol
+        iters += 1
+
+        idx = np.argmax(np.abs(e), axis=0)
+        if np.any(skip > 0):
+            sub = np.nonzero(skip > 0)[0]
+            order = np.argsort(np.abs(e[:, sub]), axis=0)
+            kth = np.minimum(skip[sub] + 1, n_arcs)
+            idx = np.asarray(idx)
+            idx[sub] = order[n_arcs - kth, np.arange(sub.size)]
+
+        same = idx == prev
+        update = ~same & ~converged
+        if update.any():
+            pos = np.nonzero(update)[0]
+            e_idx = e[idx[update], pos]
+            step = -np.round(e_idx)
+            step = np.where(step == 0, np.where(e_idx != 0, -np.sign(e_idx), 1.0), step)
+            Y[idx[update], cols[update]] += step
+            n_fixups[cols[update]] += 1
+            prev[update] = idx[update]
+            skip[update] = 0
+        skip[same & ~converged] += 1
+
+        done = converged | (iters >= max_fixups)
+        active = cols[~done]
+        skip = skip[~done]
+        prev = prev[~done]
+        iters = iters[~done]
+
+    return Y, n_fixups
+
+
+def _solve_multi(solve, AtW, M, max_bytes: int = 256 * 1024 * 1024):
+    """Solve ``AtW @ M`` for one or more right-hand sides, chunking if needed."""
+    M = np.asarray(M, dtype=float)
+    if M.ndim == 1:
+        return solve(AtW @ M)
+    n_free = AtW.shape[0]
+    n_cols = M.shape[1]
+    if n_cols == 0:
+        return np.zeros((n_free, 0), dtype=float)
+    if n_free * n_cols * 8 <= max_bytes:
+        return solve(AtW @ M)
+    out = np.empty((n_free, n_cols), dtype=float)
+    chunk = max(1, max_bytes // max(1, n_free * 8))
+    for start in range(0, n_cols, chunk):
+        stop = min(start + chunk, n_cols)
+        out[:, start:stop] = solve(AtW @ M[:, start:stop])
+    return out
 
 
 def unwrap_network(
@@ -166,16 +276,23 @@ def unwrap_network(
     if arcs.shape[0] == 0:
         raise ValueError("no arc survived the quality filter")
 
+    # ``remove_untestable`` returns the surviving arcs only; the parallel arrays
+    # still hold every arc of this step, so filter all of them with one mask that
+    # is built on the *pre-removal* arc list.
+    arcs_in = arcs
     arcs, dropped = remove_untestable(arcs, min_connections)
     removed.append(dropped)
     if arcs.shape[0] == 0:
         raise ValueError("no testable arc left after removing dangling nodes")
 
-    # drop the removed arcs from all parallel arrays
     if dropped.size:
-        key = set(map(tuple, dropped.tolist()))
-        mask = np.array([tuple(a) not in key for a in arcs.tolist()])
-        arcs, dphase, dacheck, varfac = arcs[mask], dphase[mask], dacheck[mask], varfac[mask]
+        if Nnodes >= 3_000_000_000:
+            raise ValueError("Nnodes too large for int64 arc keys")
+        dropped_key = dropped[:, 0] * np.int64(Nnodes) + dropped[:, 1]
+        arc_key = arcs_in[:, 0] * np.int64(Nnodes) + arcs_in[:, 1]
+        mask = ~np.isin(arc_key, dropped_key)
+        arcs = arcs_in[mask]
+        dphase, dacheck, varfac = dphase[mask], dacheck[mask], varfac[mask]
 
     groups = connected_groups(arcs, Nnodes)
 
@@ -216,48 +333,21 @@ def unwrap_network(
 
     # ---- normal equations -------------------------------------------------
     weights = 1.0 / np.maximum(varfac, 1e-6) ** 2 if weighted else np.ones_like(varfac)
-    Af, N, AtW = _normal_matrix(arcs, Nnodes, weights, np.nonzero(is_ref)[0])
-    solve = spla.factorized(N.tocsc())
-
     free = ~is_ref & (groups != 0)
+    Af, N, AtW = _normal_matrix(arcs, Nnodes, weights, free)
+    solve = spla.factorized(N.tocsc())
     Nfree = int(free.sum())
 
     # ---- step 1: inconsistent integers -----------------------------------
-    Y = dacheck.copy()
-    n_fixups = np.zeros(Nifgs, dtype=int)
     if max_fixups is None:
         max_fixups = arcs.shape[0]
-    for v in range(Nifgs):
-        y = Y[:, v].copy()
-        skip = 0
-        prev = -1
-        for _ in range(max_fixups):
-            rhs = AtW @ y
-            x = solve(rhs)
-            e = y - Af @ x
-            omt = float(e @ (weights * e))
-            if omt <= omt_tolerance:
-                break
-            if skip == 0:
-                idx = int(np.argmax(np.abs(e)))
-            else:
-                order = np.argsort(np.abs(e))
-                idx = int(order[-min(skip + 1, order.size)])
-            if idx == prev:
-                skip += 1
-                continue
-            skip = 0
-            step = -np.round(e[idx])
-            if step == 0:
-                step = -np.sign(e[idx]) if e[idx] != 0 else 1.0
-            y[idx] += step
-            n_fixups[v] += 1
-            prev = idx
-        Y[:, v] = y
+    Y, n_fixups = _resolve_integer_field_batched(
+        dacheck, Af, AtW, solve, weights, max_fixups, omt_tolerance
+    )
 
     # ---- final integer + phase adjustment --------------------------------
-    Xa = np.column_stack([solve(AtW @ Y[:, v]) for v in range(Nifgs)]) if Nifgs else np.zeros((Nfree, 0))
-    Xp = np.column_stack([solve(AtW @ dphase[:, v]) for v in range(Nifgs)])
+    Xa = _solve_multi(solve, AtW, Y) if Nifgs else np.zeros((Nfree, 0))
+    Xp = _solve_multi(solve, AtW, dphase)
 
     acheck = np.full((Nnodes, Nifgs), np.nan)
     phase_unw = np.full((Nnodes, Nifgs), np.nan)

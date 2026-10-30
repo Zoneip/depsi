@@ -1,5 +1,10 @@
 # 性能实测报告（v0，2026-10-29）
 
+状态：**v0 实测完成**。本报告全部数据来自本机（16 vCPU / 14 GiB / 无 GPU）。
+用户已告知未来提供 64 × 2 GB 显存的大机器（型号与加速栈待确认），届时需按本文 §7 复测；
+用户另告知**可 100% 提供 MATLAB 环境**（版本/接入时间/Toolbox 待确认），届时可用真机 MATLAB
+替换 Octave 代跑，并补 MEX 基准。在拿到机器与 MATLAB 前不做 GPU 专用实现、不最终否决 MEX。
+
 > 口径：**实测**与**估算**严格分开。所有"实测"都可按本文末命令复现；凡涉及 MATLAB
 > 的地方都写明是用 **Octave 9.4** 代跑（本机无 MATLAB），并给出外推区间。
 
@@ -12,6 +17,7 @@
 | MATLAB 版本 | **M 文件用 Octave 9.4.0 代跑**（含 image/statistics/parallel 包） |
 | depsipy | Python 3.13.5、numpy 2.5.4、scipy 1.18.1、numba 0.68.1 |
 | 数据 | `simulate.generate_project` 合成：DePSI 原始格式 + 真值 |
+| 算力规划 | 未来 64 × 2 GB 显存机器（待接入，未参与本报告） |
 
 ## 1. 四个版本能不能测
 
@@ -20,7 +26,7 @@
 | `ps_toolbox/ps_toolbox`（v1.7.7.5） | MATLAB | ✔ 用 Octave | m 代码可直接跑，缺的函数用 shim 补齐（见 §5） |
 | `ps_toolbox_v1.7.8.8_hhf` | MATLAB | ✔ 用 Octave | 同上；其 `parfor` 在 Octave 中**串行执行** |
 | `Doris干涉加时序depsi/` | Python 干涉链 | ✘ | 依赖 DORIS 可执行文件与 SAR 原始数据，本机两者皆无；且它不含时序反演 |
-| `InSAR_affair-shallow-2026-10-19/` | Python DANI-NET | ✘ | 需要 torch（未安装）+ NPU/GPU + 训练数据；且与 PS 时序列不是同一任务 |
+| `InSAR_affair-shallow-2026-10-19/` | Python DANI-NET | ✘ | 原工作区副本已于 2026-10-29 移除；本机也未装 torch/NPU 训练环境，且与 PS 时序列不是同一任务 |
 | `depsipy`（本次新写） | Python | ✔ | — |
 
 **结论**：能做同类比较的只有两个 MATLAB 版本与 depsipy。另外两个不是"同一程序的四个版本"，
@@ -87,6 +93,7 @@
 3. 选择的 I/O 优势与解释器无关（是字节数），这部分结论对 MATLAB 同样成立。
 4. 合成数据 ≠ 真实数据：真实 SLC 的幅度分布、失相干、地形相位都会改变耗时的常数项
    （但改变的是常数，不是复杂度）。
+5. 本报告是 **v0**：只覆盖估计与选择两步；pipeline/CLI 尚未落地（M2），端到端数据待 M2 后再补。
 
 ## 6. 对拍发现的两个真 bug（已修，有回归测试）
 

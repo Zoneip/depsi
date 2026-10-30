@@ -20,6 +20,7 @@ fast = ["numba>=0.58"]
 hdf = ["h5py>=3.8"]
 plot = ["matplotlib>=3.7"]
 all = ["depsipy[fast,hdf,plot]"]
+dev = ["pytest>=8"]
 
 [project.scripts]
 depsipy = "depsipy.cli:main"

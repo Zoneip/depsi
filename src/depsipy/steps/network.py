@@ -74,13 +74,19 @@ def spider_arcs(
     tree = cKDTree(np.column_stack([x, y]))
     k = min(int(Ncon) + 1, x.size)
     dist, idx = tree.query(np.column_stack([x, y]), k=k)
-    edges = set()
-    for i in range(x.size):
-        for j, d in zip(idx[i], dist[i]):
-            if j == i or d > max_arc_length:
-                continue
-            edges.add((min(i, int(j)), max(i, int(j))))
-    return np.array(sorted(edges), dtype=np.int64)
+    idx = np.asarray(idx).reshape(x.size, k)
+    dist = np.asarray(dist).reshape(x.size, k)
+
+    i = np.repeat(np.arange(x.size), k)
+    j = idx.ravel()
+    d = dist.ravel()
+    mask = (j >= 0) & (j != i) & (d <= max_arc_length)
+    lo = np.minimum(i[mask], j[mask]).astype(np.int64)
+    hi = np.maximum(i[mask], j[mask]).astype(np.int64)
+    if lo.size == 0:
+        return np.array([], dtype=np.int64)
+    keys = np.unique(lo * np.int64(x.size) + hi)
+    return np.column_stack((keys // np.int64(x.size), keys % np.int64(x.size)))
 
 
 def form_network(

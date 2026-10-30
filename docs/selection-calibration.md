@@ -1,5 +1,7 @@
 # 选择步骤校准记录（M1）
 
+状态：**M1 验收通过（2026-10-29）**。结论仅基于合成数据；真实工程阈值仍待复核（见末尾待办）。
+
 数据：`simulate.generate_project(Nlines=120, Npixels=120, Nslc=12, seed=0, ps_fraction≈10%,
 noise_amp=0.25, DS 幅度调制 σ=0.45, PS 幅度调制 σ=0.12)`，参数取自生成器写出的 `param_file.txt`
 （`psc_threshold=0.3`、`psc_selection_gridsize=18 m`、`psc_distribution='uniform'`、

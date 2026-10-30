@@ -2,6 +2,15 @@
 
 from __future__ import annotations
 
+from .doris import (
+    DorisMetadata,
+    DorisRaster,
+    MFFHeader,
+    doris_format,
+    read_doris_metadata,
+    read_mff_header,
+    read_res,
+)
 from .raw import (
     RawFile,
     RawFormat,
@@ -15,6 +24,13 @@ from .raw import (
 )
 
 __all__ = [
+    "DorisMetadata",
+    "DorisRaster",
+    "MFFHeader",
+    "doris_format",
+    "read_doris_metadata",
+    "read_mff_header",
+    "read_res",
     "RawFile",
     "RawFormat",
     "file_size",

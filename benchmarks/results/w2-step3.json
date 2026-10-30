@@ -1,0 +1,100 @@
+{
+  "schema": 1,
+  "scenario": "/tmp/dpbench",
+  "Nlines": 400,
+  "Npixels": 400,
+  "Nslc": 20,
+  "Nifgs": 19,
+  "Npsc": 520,
+  "Narcs": 1540,
+  "stages": {
+    "selection": 0.20976,
+    "network": 0.002365,
+    "vce": 0.086282,
+    "estimate": 0.008432,
+    "unwrap": 0.956894
+  },
+  "peak_mem_mb": 186.1,
+  "profile": [
+    {
+      "function": "/home/zoneip/工程/Zoneip/depsi/benchmarks/step_bench.py:80:run_step3",
+      "cumtime": 1.2775
+    },
+    {
+      "function": "/home/zoneip/工程/Zoneip/depsi/src/depsipy/steps/unwrapping.py:223:unwrap_network",
+      "cumtime": 1.0292
+    },
+    {
+      "function": "/home/zoneip/工程/Zoneip/depsi/src/depsipy/steps/unwrapping.py:147:_resolve_integer_field_batched",
+      "cumtime": 1.0257
+    },
+    {
+      "function": "~:0:<method 'solve' of 'SuperLU' objects>",
+      "cumtime": 0.3164
+    },
+    {
+      "function": "/home/zoneip/工程/Zoneip/depsi/.venv/lib/python3.13/site-packages/numpy/_core/fromnumeric.py:48:_wrapfunc",
+      "cumtime": 0.2668
+    },
+    {
+      "function": "/home/zoneip/工程/Zoneip/depsi/src/depsipy/steps/selection.py:332:select_psc_psp",
+      "cumtime": 0.2298
+    },
+    {
+      "function": "/home/zoneip/工程/Zoneip/depsi/.venv/lib/python3.13/site-packages/numpy/_core/fromnumeric.py:1115:argsort",
+      "cumtime": 0.2225
+    },
+    {
+      "function": "~:0:<method 'argsort' of 'numpy.ndarray' objects>",
+      "cumtime": 0.2201
+    },
+    {
+      "function": "/home/zoneip/工程/Zoneip/depsi/src/depsipy/steps/selection.py:89:sidelobe_mask",
+      "cumtime": 0.1956
+    },
+    {
+      "function": "/home/zoneip/工程/Zoneip/depsi/src/depsipy/steps/selection.py:136:_decluster",
+      "cumtime": 0.1838
+    },
+    {
+      "function": "/home/zoneip/工程/Zoneip/depsi/.venv/lib/python3.13/site-packages/scipy/sparse/_base.py:1006:__matmul__",
+      "cumtime": 0.1317
+    },
+    {
+      "function": "/home/zoneip/工程/Zoneip/depsi/.venv/lib/python3.13/site-packages/scipy/sparse/_base.py:875:_matmul_dispatch",
+      "cumtime": 0.1181
+    },
+    {
+      "function": "/home/zoneip/工程/Zoneip/depsi/.venv/lib/python3.13/site-packages/scipy/sparse/_compressed.py:399:_matmul_multivector",
+      "cumtime": 0.1131
+    },
+    {
+      "function": "/home/zoneip/工程/Zoneip/depsi/src/depsipy/steps/selection.py:232:_nearest_positive_kdtree",
+      "cumtime": 0.0966
+    },
+    {
+      "function": "/home/zoneip/工程/Zoneip/depsi/src/depsipy/steps/selection.py:212:_nearest_positive",
+      "cumtime": 0.0966
+    },
+    {
+      "function": "/home/zoneip/工程/Zoneip/depsi/src/depsipy/steps/selection.py:152:sweep",
+      "cumtime": 0.0809
+    },
+    {
+      "function": "~:0:<method 'reduce' of 'numpy.ufunc' objects>",
+      "cumtime": 0.0555
+    },
+    {
+      "function": "~:0:<built-in method scipy.sparse._sparsetools.csr_matvecs>",
+      "cumtime": 0.0518
+    },
+    {
+      "function": "/home/zoneip/工程/Zoneip/depsi/.venv/lib/python3.13/site-packages/numpy/_core/fromnumeric.py:2342:sum",
+      "cumtime": 0.0459
+    },
+    {
+      "function": "/home/zoneip/工程/Zoneip/depsi/.venv/lib/python3.13/site-packages/numpy/_core/fromnumeric.py:66:_wrapreduction",
+      "cumtime": 0.0439
+    }
+  ]
+}

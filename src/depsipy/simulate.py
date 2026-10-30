@@ -233,7 +233,10 @@ def generate_project(
         dates.append(f"{(i * int(Btemp_days)):05d}")
         orbits.append(str(10000 + i))
 
-    for i in range(Nifgs):
+    # DePSI input lists Nifgs *slave* rows plus one master row; the master must
+    # not appear twice (the preflight rejects duplicate acquisitions).
+    slave = [i for i in range(Nslc) if i != master]
+    for i in slave:
         phase = m2ph * h2ph_scene[i] * dem + m2ph * defo[i] + atmo_scene[i]
         amp = amp_field * np.where(
             ps_mask, ps_modulation[i] * ps_modulation[master],
@@ -256,11 +259,12 @@ def generate_project(
     # -- input file ----------------------------------------------------------
     crop = (1, Nlines, 1, Npixels)
     lines = []
-    for i in range(Nifgs):
-        # DePSI sorts on Btemp and expects the master as the last line
+    for k, i in enumerate(slave):
+        # DePSI sorts on Btemp and expects the master as the last line.
+        # filenames_ifg/h2ph are indexed by slave order (k), not scene (i).
         lines.append(
-            f"{orbits[i]} {dates[i]} {filenames_slc[i]} {filenames_ifg[i]} "
-            f"{filenames_h2ph[i]} {Path(filenames_ifg[i]).stem} "
+            f"{orbits[i]} {dates[i]} {filenames_slc[i]} {filenames_ifg[k]} "
+            f"{filenames_h2ph[k]} {Path(filenames_ifg[k]).stem} "
             f"{Bperp[i]:.1f} {Btemp[i]:.9f} {Bdop[i]:.1f} "
             f"{crop[0]} {crop[1]} {crop[2]} {crop[3]}"
         )
@@ -281,6 +285,7 @@ def generate_project(
         Bperp=np.asarray(Bperp, dtype=float),
         Btemp_days=Btemp_days_arr,
         master_index=master,
+        slave_index=np.asarray(slave, dtype=int),
         m2ph=m2ph,
     )
     truth_file = workdir / "truth.npz"
@@ -295,6 +300,7 @@ def generate_project(
         Btemp_days=Btemp_days_arr,
         m2ph=np.array([m2ph]),
         master_index=np.array([master]),
+        slave_index=np.asarray(slave, dtype=int),
     )
 
     param_file = workdir / "param_file.txt"

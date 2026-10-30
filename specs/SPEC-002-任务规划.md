@@ -1,6 +1,6 @@
 # SPEC-002 · 任务规划（里程碑）
 
-状态：**建议 / 待用户确认**
+状态：**执行中（2026-10-29）**：M0/M1 已完成，M2 为 MVP（组 2..8，无状态落盘）；M4 已有 v0 性能对拍但未完成规模基准。
 日期：2026-10-29
 前置：`ADR-001-技术栈.md`（栈选型）、`SPEC-001-DepSIPy重实现与优化.md`（背景与瓶颈）
 
@@ -12,12 +12,12 @@
 
 | M | 名称 | 交付物 | 状态 |
 | --- | --- | --- | --- |
-| M0 | 数值地基 | raw I/O、参数解析、27 模型、LAMBDA/ILS、估计几何、48 项测试 | **已完成** |
+| M0 | 数值地基 | raw I/O、参数解析、27 模型、LAMBDA/ILS、估计几何、56 项测试 | **已完成** |
 | M1 | 合成数据 + 选择 | 合成项目生成器、PSC/PSP 选择、mrm/amp_disp/旁瓣图、选择验收 | **已验收**（见 §M1 实测） |
-| M2 | 端到端主链 | pipeline（1→7 组骨架）、CLI、状态落盘、速率/形变输出、真值验收 | 进行中 |
-| M3 | 大气与形变分离 | 时间滤波 + Kriging（第 4 组），形变时序产物 | 未开始 |
-| M4 | 性能工程与基准 | 流式/批量改造、内存剖析、`benchmarks/report.md`、10× 目标验证 | 未开始 |
-| M5 | 加密与时序精化 | PS 加密、形变模型（bowl）、噪声滤波、时空一致性（第 5/6/8 组） | 未开始 |
+| M2 | 端到端主链 | pipeline（组 2..8）、CLI、真值验收 | **MVP 完成**（`depsipy run` + `tests/test_pipeline.py`）；状态落盘未完成 |
+| M3 | 大气与形变分离 | 时间滤波 + Kriging（第 4 组），形变时序产物 | **部分完成**（滤波已接主链；Kriging→PSP 未接） |
+| M4 | 性能工程与基准 | 流式/批量改造、内存剖析、`benchmarks/report.md`、10× 目标验证 | **部分完成（v0 对拍已出，见 docs/performance.md）** |
+| M5 | 加密与时序精化 | PS 加密、形变模型（bowl）、噪声滤波、时空一致性（第 5/6/8 组） | **部分完成**（加密/噪声/STC 已接主链；bowl 与幅度分箱迭代未做） |
 | M6 | 输出与互通 | GeoTIFF/CSV/JSON、与 RapidSAR 的串联脚本、MATLAB 兼容性核对 | 未开始 |
 | M7 | 文档与交接 | `docs/parity.md` 完整、用户手册、示例工程、复现脚本 | 未开始 |
 
@@ -27,14 +27,14 @@
 
 ## M0（已完成）
 
-- 证据：`.venv/bin/python -m pytest tests -q` → 48 passed。
+- 证据：`.venv/bin/python -m pytest tests -q` → 56 passed（2026-10-29）。
 - 关键数字：LAMBDA numba 相对纯 Python **37×**（97k 弧/s，n=10）。
-- 已知缺口：`steps/` 下的选择、网络、解缠尚未有端到端证据。
+- 已知缺口：网络与解缠尚未有端到端证据（选择已在 M1 验收）。
 
 ## M1 · 合成数据 + 选择
 
 **交付**
-1. `simulate.generate_project()` 能生成 DePSI 格式工程 + `truth.npz`（已写，待跑通）。
+1. `simulate.generate_project()` 能生成 DePSI 格式工程 + `truth.npz`（**已完成并跑通**）。
 2. `steps/selection.select_psc_psp()` 输出 PSC/PSP 列表 + `_mrm.raw`/`_amp_disp.raw`/`_side_lobe_mask.raw`（已写）。
 3. 选择验收脚本：与 `truth.ps_mask` 比对。
 
@@ -85,7 +85,8 @@
 **交付**
 1. `benchmarks/run_bench.py`：规模参数化（small/medium/large），输出耗时、峰值内存、I/O 字节数。
 2. 优化项：选择步骤的块大小自适应；估计的批处理与缓存复用；解缠的因子化复用；避免重复读 raw。
-3. `benchmarks/out/report.md`：与 MATLAB 的**估算**对比（复杂度 + I/O 字节），并标注「无 MATLAB 环境，未实测」。
+3. `benchmarks/out/report.md`：与 MATLAB 的对比；当前先用 `docs/performance.md` v0（Octave 代跑）
+   占位，用户可提供 MATLAB 环境，接入后补真机实测与 MEX 对照。
 
 **验收**
 - 端到端相对 M2 首个可用版本 ≥ 3×；相对 MATLAB 的估算 ≥ 10×（需在报告里给推导）。
@@ -120,6 +121,6 @@
 
 ## 待用户确认
 
-1. 是否认可 `ADR-001` 的栈选型（Python + numpy/scipy + numba，raw 兼容，npz 状态）。
-2. 里程碑顺序是否认可（M1 → M2 → M3 → M5，M4 可提前插入）。
-3. M3 的验收里「APS 残差下降 ≥50%」是否是你关心的口径，还是更关心**时序形变曲线**的保真度。
+1. ~~是否认可 `ADR-001` 的栈选型~~ → 已采纳并实施（2026-10-29）；Rust 仅作未来独立分支预留。
+2. 里程碑顺序是否认可（M1 → M2 → M3 → M5，M4 可提前插入）——**仍待确认**。
+3. M3 的验收里「APS 残差下降 ≥50%」是否是你关心的口径，还是更关心**时序形变曲线**的保真度——**仍待确认**。
