@@ -13,5 +13,4 @@ runs/
 examples/
 *.tif
 .pytest_cache/
-workspace/
-reference/
+
